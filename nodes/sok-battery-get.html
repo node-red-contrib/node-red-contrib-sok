@@ -1,0 +1,37 @@
+<script type="text/javascript">
+  RED.nodes.registerType('sok-battery-get', {
+    category: 'SOK',
+    color: '#d8eef8',
+    defaults: {
+      name: { value: '' },
+      device: { type: 'sok-battery-device', required: true },
+      reads: { value: 'telemetry,limits,status' }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-download',
+    label: function () {
+      return this.name || 'SOK get';
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="sok-battery-get">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-device"><i class="fa fa-bluetooth"></i> Device</label>
+    <input type="text" id="node-input-device">
+  </div>
+  <div class="form-row">
+    <label for="node-input-reads"><i class="fa fa-list"></i> Reads</label>
+    <input type="text" id="node-input-reads" placeholder="telemetry,limits,status">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="sok-battery-get">
+  <p>Reads SOK battery data over BLE. Incoming <code>msg.payload</code> may be a comma-separated read list, an array, or <code>{ reads }</code>.</p>
+  <p>Known reads are <code>telemetry</code>, <code>limits</code>, and <code>status</code>.</p>
+</script>
