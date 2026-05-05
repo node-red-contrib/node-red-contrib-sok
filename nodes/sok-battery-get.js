@@ -14,17 +14,17 @@ module.exports = function registerSokBatteryGetNode(RED) {
         if (!node.device) throw new Error('SOK battery device node is not configured.');
         const override = normalizePayload(msg.payload);
         const reads = override.reads || node.reads;
+        const deviceName = override.deviceName || (node.device.targetMode === 'name' ? node.device.deviceName : undefined);
         node.status({ fill: 'yellow', shape: 'ring', text: 'reading' });
         const result = await node.device.enqueue((sok) =>
-          sok.readBattery({
+          sok.readBatteries({
             bluetooth: node.device.bluetooth,
             namePrefix: node.device.namePrefix,
-            address: node.device.address,
-            reads,
-            logger: (message) => node.device.logDebug(message)
+            deviceName,
+            reads
           })
         );
-        node.status({ fill: 'green', shape: 'dot', text: 'ok' });
+        node.status({ fill: 'green', shape: 'dot', text: `${result.length} found` });
         msg.payload = result;
         emit(msg);
         done?.();
@@ -42,7 +42,13 @@ function normalizePayload(payload) {
   if (Array.isArray(payload)) return { reads: payload.map(String).filter(Boolean) };
   if (typeof payload === 'string') return { reads: splitReads(payload) };
   if (payload && typeof payload === 'object' && payload.reads !== undefined) {
-    return { reads: Array.isArray(payload.reads) ? payload.reads.map(String).filter(Boolean) : splitReads(String(payload.reads)) };
+    return {
+      reads: Array.isArray(payload.reads) ? payload.reads.map(String).filter(Boolean) : splitReads(String(payload.reads)),
+      deviceName: typeof payload.deviceName === 'string' && payload.deviceName ? payload.deviceName : undefined
+    };
+  }
+  if (payload && typeof payload === 'object' && typeof payload.deviceName === 'string') {
+    return { deviceName: payload.deviceName };
   }
   return {};
 }

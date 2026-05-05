@@ -32,6 +32,7 @@
 </script>
 
 <script type="text/html" data-help-name="sok-battery-get">
-  <p>Reads SOK battery data over BLE. Incoming <code>msg.payload</code> may be a comma-separated read list, an array, or <code>{ reads }</code>.</p>
+  <p>Reads SOK battery data over BLE. Output <code>msg.payload</code> is always an array with zero, one, or multiple readings.</p>
+  <p>Incoming <code>msg.payload</code> may be a comma-separated read list, an array, or <code>{ reads, deviceName }</code>.</p>
   <p>Known reads are <code>telemetry</code>, <code>limits</code>, and <code>status</code>.</p>
 </script>

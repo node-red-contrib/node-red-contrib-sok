@@ -1,6 +1,4 @@
-'use strict';
-
-function modbusCrc(data) {
+export function modbusCrc(data: Buffer): number {
   let crc = 0xffff;
   for (const byte of data) {
     crc ^= byte;
@@ -13,21 +11,15 @@ function modbusCrc(data) {
   return crc & 0xffff;
 }
 
-function appendCrc(data) {
+export function appendCrc(data: Buffer): Buffer {
   const body = Buffer.from(data);
   const crc = modbusCrc(body);
   return Buffer.concat([body, Buffer.from([crc & 0xff, (crc >> 8) & 0xff])]);
 }
 
-function verifyCrc(frame) {
+export function verifyCrc(frame: Buffer): boolean {
   if (!Buffer.isBuffer(frame) || frame.length < 4) return false;
   const expected = modbusCrc(frame.subarray(0, -2));
   const actual = frame.readUInt16LE(frame.length - 2);
   return expected === actual;
 }
-
-module.exports = {
-  appendCrc,
-  modbusCrc,
-  verifyCrc
-};

@@ -1,9 +1,8 @@
-'use strict';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
-const { buildReadHoldingRegisters, decodeSnapshot, parseReadResponse } = require('../lib/modbus');
+import { buildReadHoldingRegisters, decodeSnapshot, matchesSokDevice, normalizeReads, parseReadResponse } from '../dist/index.js';
+import { toReadOptions } from '../dist/cli.js';
 
 test('builds SOK Modbus read requests from the capture', () => {
   assert.equal(buildReadHoldingRegisters(0x0080, 0x007a).toString('hex'), '01030080007ac5c1');
@@ -63,7 +62,7 @@ test('decodes app-visible fields from live telemetry response', () => {
   assert.equal(decoded.telemetry.temperaturesF, undefined);
 });
 
-test('decodes app-visible parameter limits', () => {
+test('decodes app-visible parameter limits without exposing raw debug maps', () => {
   const frame = Buffer.from(
     '01036205dc056400140e740ed80d7a0014041003e804b0001409c408fc0c1c0014ffffffff00d200dc006400fa012c00ff01040258032003e804b0001e0258028a0226028a02bc02580000ffce0000ff6aff38ff6a041a044c0384035203b60320ff6aff38db2b',
     'hex'
@@ -87,4 +86,29 @@ test('decodes app-visible parameter limits', () => {
     mosOverTemperatureC: 110,
     shortCircuitCurrentA: 1200
   });
+  assert.equal(Object.hasOwn(decoded, 'registers'), false);
+  assert.equal(Object.hasOwn(decoded, 'frames'), false);
+});
+
+test('matches devices by exact name before prefix or service fallback', () => {
+  assert.equal(matchesSokDevice({ name: 'SK12V324PH00057' }, { namePrefix: 'SK', deviceName: 'SK12V324PH00057' }), true);
+  assert.equal(matchesSokDevice({ name: 'SK12V324PH00057' }, { namePrefix: 'SK', deviceName: 'SK12V324PH00058' }), false);
+  assert.equal(matchesSokDevice({ name: 'SK12V324PH00057' }, { namePrefix: 'SK' }), true);
+  assert.equal(matchesSokDevice({ name: 'Other', serviceUuids: ['0000fff0-0000-1000-8000-00805f9b34fb'] }, { namePrefix: 'SK', serviceUuid: 'fff0' }), true);
+});
+
+test('normalizes read groups and rejects unknown groups', () => {
+  assert.deepEqual(
+    normalizeReads('telemetry,status').map((read) => read.name),
+    ['telemetry', 'status']
+  );
+  assert.throws(() => normalizeReads('bogus'), /Unknown SOK read/);
+});
+
+test('maps CLI globals and optional device name to read options', () => {
+  const options = toReadOptions({ bluetooth: 'noble', namePrefix: 'SK', reads: 'telemetry', debug: false }, 'SK12V324PH00057');
+  assert.equal(options.bluetooth, 'noble');
+  assert.equal(options.namePrefix, 'SK');
+  assert.equal(options.reads, 'telemetry');
+  assert.equal(options.deviceName, 'SK12V324PH00057');
 });

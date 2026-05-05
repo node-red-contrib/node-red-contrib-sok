@@ -5,11 +5,78 @@
       name: { value: '' },
       bluetooth: { value: 'auto' },
       namePrefix: { value: 'SK' },
-      address: { value: '' },
-      debug: { value: false }
+      targetMode: { value: 'all' },
+      deviceName: { value: '' }
     },
     label: function () {
-      return this.name || this.address || this.namePrefix || 'SOK battery';
+      return this.name || this.deviceName || 'SOK battery';
+    },
+    oneditprepare: function () {
+      var deviceSelect = $('#node-config-input-deviceNameSelect');
+      var deviceName = $('#node-config-input-deviceName');
+      var targetMode = $('#node-config-input-targetMode');
+      var searchButton = $('#node-config-input-search');
+      var searchStatus = $('#node-config-input-search-status');
+
+      function hasOption(value) {
+        var found = false;
+        deviceSelect.find('option').each(function () {
+          if ($(this).attr('value') === value) found = true;
+        });
+        return found;
+      }
+
+      function setSelected(mode, name) {
+        targetMode.val(mode);
+        deviceName.val(name || '');
+        deviceSelect.val(mode === 'all' ? '' : name);
+      }
+
+      function ensureCurrentOption() {
+        var currentName = deviceName.val();
+        if (currentName && !hasOption(currentName)) {
+          deviceSelect.append($('<option></option>').attr('value', currentName).text(currentName));
+        }
+        setSelected(targetMode.val() || (currentName ? 'name' : 'all'), currentName);
+      }
+
+      deviceSelect.on('change', function () {
+        var selected = deviceSelect.val();
+        setSelected(selected ? 'name' : 'all', selected);
+      });
+
+      searchButton.on('click', function () {
+        searchButton.prop('disabled', true);
+        searchStatus.text('searching...');
+        $.getJSON('sok-battery/devices', {
+          bluetooth: $('#node-config-input-bluetooth').val(),
+          namePrefix: $('#node-config-input-namePrefix').val()
+        })
+          .done(function (devices) {
+            var previous = deviceName.val();
+            deviceSelect.empty();
+            deviceSelect.append($('<option></option>').attr('value', '').text('All discovered devices'));
+            devices.forEach(function (device) {
+              if (!device.name) return;
+              deviceSelect.append($('<option></option>').attr('value', device.name).text(device.name));
+            });
+            if (previous && hasOption(previous)) {
+              setSelected('name', previous);
+            } else {
+              setSelected('all', '');
+            }
+            searchStatus.text(devices.length + ' found');
+          })
+          .fail(function (xhr) {
+            var response = xhr.responseJSON || {};
+            searchStatus.text(response.error || 'search failed');
+          })
+          .always(function () {
+            searchButton.prop('disabled', false);
+          });
+      });
+
+      ensureCurrentOption();
     }
   });
 </script>
@@ -32,15 +99,20 @@
     <input type="text" id="node-config-input-namePrefix" placeholder="SK">
   </div>
   <div class="form-row">
-    <label for="node-config-input-address"><i class="fa fa-map-marker"></i> Address</label>
-    <input type="text" id="node-config-input-address" placeholder="optional BLE address">
+    <label for="node-config-input-deviceNameSelect"><i class="fa fa-search"></i> Device</label>
+    <select id="node-config-input-deviceNameSelect" style="width:60%;">
+      <option value="">All discovered devices</option>
+    </select>
+    <button type="button" id="node-config-input-search" class="red-ui-button" style="margin-left:4px;">Search</button>
+    <input type="hidden" id="node-config-input-targetMode">
+    <input type="hidden" id="node-config-input-deviceName">
   </div>
   <div class="form-row">
-    <label for="node-config-input-debug"><i class="fa fa-bug"></i> Debug</label>
-    <input type="checkbox" id="node-config-input-debug" style="display:inline-block;width:auto;vertical-align:top;">
+    <label></label>
+    <span id="node-config-input-search-status" style="color:#666;"></span>
   </div>
 </script>
 
 <script type="text/html" data-help-name="sok-battery-device">
-  <p>Configures a SOK smart battery BLE target. Use <code>bluez</code> on Linux devices where noble is not available without extra privileges.</p>
+  <p>Configures SOK smart battery BLE discovery. Select a discovered advertised device name, or keep all discovered devices.</p>
 </script>

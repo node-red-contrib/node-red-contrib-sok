@@ -1,35 +1,51 @@
 # node-red-contrib-sok
 
-Simple first-pass Node-RED BLE reader for SOK smart batteries.
+Strict TypeScript Node.js library, CLI, and Node-RED nodes for SOK smart batteries over BLE.
 
 The current implementation targets the BLE protocol seen in `captures/SOK Batterie SK12V324PH00057.pklg`:
 
-- advertised name: `SK12V314PH00057`
+- advertised name: `SK12V314XXXXXXX`
 - service UUID: `fff0`
 - notify characteristic: `fff1`
 - write characteristic: `fff2`
 - payload protocol: Modbus RTU read-holding-register frames over BLE notifications
+
+## Library
+
+The package exports a typed ESM API from `dist/index.js`:
+
+- `discoverBatteries(options)` returns matching BLE devices
+- `readBatteries(options)` discovers and reads zero, one, or many devices
+- `readBatteryDevice(device, options)` reads one discovered device
+- `shutdownBluetooth()` stops active BLE sessions
+
+Read output is always an array at the CLI and Node-RED layer. Each reading contains compact device metadata, a timestamp, and decoded data. Raw register maps and Modbus frames are not included in public JSON output.
 
 ## Nodes
 
 - `sok-battery-device`: config node for the battery BLE target
 - `sok-battery-get`: input node that reads `telemetry`, `limits`, and `status`
 
-The output is placed in `msg.payload` and includes decoded fields, raw register maps, and raw Modbus response frames.
+Use the config node's search button to discover SOK batteries from the Node-RED editor. Select one exact advertised device name, or keep "All discovered devices".
+
+The output is placed in `msg.payload` as an array with zero, one, or multiple readings.
 
 ## CLI
 
 ```sh
 npm install
-npm run read -- --debug
+npm run build
+npm run discover
+npm run get
 ```
 
 Useful options:
 
 ```sh
-node ./bin/sok-battery.js read --name-prefix SK --reads telemetry
-node ./bin/sok-battery.js read --address 40:d6:3c:51:00:18
-node ./bin/sok-battery.js read --bluetooth bluez --debug
+node ./bin/sok-battery.js discover --name-prefix SK
+node ./bin/sok-battery.js get --reads telemetry
+node ./bin/sok-battery.js get SK12V314XXXXXXX
+node ./bin/sok-battery.js get --bluetooth bluez --debug
 ```
 
 Bluetooth backends:
@@ -38,4 +54,11 @@ Bluetooth backends:
 - `bluez`: uses Linux BlueZ over D-Bus, useful on devices where noble would require extra privileges
 - `noble`: uses `@abandonware/noble`, useful for macOS smoke tests
 
-This is deliberately small and capture-led. The next refactor can split BLE backends, extend the register map, and add richer Node-RED configuration once the live read is proven against the battery.
+## Development
+
+```sh
+npm run build
+npm run lint
+npm test
+npm run check
+```
