@@ -19,7 +19,7 @@
     "LICENSE"
   ],
   "bin": {
-    "sok-battery": "./bin/sok-battery.js"
+    "sok-battery": "bin/sok-battery.js"
   },
   "node-red": {
     "nodes": {
