@@ -17,9 +17,28 @@ The package exports a typed ESM API from `dist/index.js`:
 - `discoverBatteries(options)` returns matching BLE devices
 - `readBatteries(options)` discovers and reads zero, one, or many devices
 - `readBatteryDevice(device, options)` reads one discovered device
+- `connectBatteryReaders(options)` discovers and connects once, then returns persistent readers with `read()` and `disconnect()`
 - `shutdownBluetooth()` stops active BLE sessions
 
 Read output is always an array at the CLI and Node-RED layer. Each reading contains compact device metadata, a timestamp, and decoded data. Raw register maps and Modbus frames are not included in public JSON output.
+
+For repeated reads, keep the BLE session open and only issue new register requests:
+
+```js
+import { connectBatteryReaders } from 'node-red-contrib-sok';
+
+const readers = await connectBatteryReaders({
+  deviceName: 'SK12V314XXXXXXX',
+  reads: 'telemetry'
+});
+
+try {
+  const reading = await readers[0].read();
+  console.log(reading.decoded);
+} finally {
+  await Promise.all(readers.map((reader) => reader.disconnect()));
+}
+```
 
 ## Nodes
 
@@ -45,8 +64,11 @@ Useful options:
 node ./bin/sok-battery.js discover --name-prefix SK
 node ./bin/sok-battery.js get --reads telemetry
 node ./bin/sok-battery.js get SK12V314XXXXXXX
+node ./bin/sok-battery.js get SK12V314XXXXXXX --interval 5
 node ./bin/sok-battery.js get --bluetooth bluez --debug
 ```
+
+`get --interval 5` keeps the BLE session open and reads every five seconds until stopped.
 
 Bluetooth backends:
 

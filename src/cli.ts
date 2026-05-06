@@ -1,6 +1,7 @@
 import { Command, Option } from 'commander';
+import { setTimeout as delay } from 'node:timers/promises';
 
-import { discoverBatteries, readBatteries, shutdownBluetooth, type BluetoothBackendName, type ReadOptions } from './index.js';
+import { connectBatteryReaders, discoverBatteries, readBatteries, shutdownBluetooth, type BluetoothBackendName, type ReadOptions, type SokBatteryReader } from './index.js';
 
 type Logger = (message: string) => void;
 
@@ -9,6 +10,10 @@ interface GlobalCliOptions {
   namePrefix: string;
   reads: string;
   debug?: boolean;
+}
+
+interface GetCliOptions extends GlobalCliOptions {
+  interval?: string;
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
@@ -40,10 +45,17 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       .command('get')
       .description('Read one exact SOK battery by advertised name, or all discovered SOK batteries.')
       .argument('[deviceName]', 'exact advertised BLE device name')
-  ).action(async (deviceName: string | undefined, options: Partial<GlobalCliOptions>, command: Command) => {
+      .option('--interval <seconds>', 'read repeatedly every N seconds using persistent BLE sessions')
+  ).action(async (deviceName: string | undefined, options: Partial<GetCliOptions>, command: Command) => {
     const globals = globalOptions(command, options);
-    const result = await readBatteries(toReadOptions(globals, deviceName));
-    await writeJson(result);
+    const intervalMs = parseIntervalMs(options.interval);
+    if (intervalMs === null) {
+      const result = await readBatteries(toReadOptions(globals, deviceName));
+      await writeJson(result);
+      return;
+    }
+
+    await readAtInterval(globals, deviceName, intervalMs);
   });
 
   try {
@@ -51,6 +63,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   } finally {
     await shutdownBluetooth();
   }
+}
+
+export function parseIntervalMs(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('--interval must be a number greater than 0 seconds.');
+  return seconds * 1000;
 }
 
 export function toReadOptions(globals: GlobalCliOptions, deviceName?: string): ReadOptions {
@@ -95,6 +114,29 @@ async function writeJson(value: unknown): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     process.stdout.write(`${JSON.stringify(value, null, 2)}\n`, (error) => (error ? reject(error) : resolve()));
   });
+}
+
+async function readAtInterval(globals: GlobalCliOptions, deviceName: string | undefined, intervalMs: number): Promise<void> {
+  const readers = await connectBatteryReaders(toReadOptions(globals, deviceName));
+  if (readers.length === 0) {
+    await writeJson([]);
+    return;
+  }
+
+  try {
+    while (true) {
+      await writeJson(await readPersistentReaders(readers));
+      await delay(intervalMs);
+    }
+  } finally {
+    await Promise.all(readers.map((reader) => reader.disconnect().catch(() => {})));
+  }
+}
+
+async function readPersistentReaders(readers: SokBatteryReader[]) {
+  const readings = [];
+  for (const reader of readers) readings.push(await reader.read());
+  return readings;
 }
 
 function installSignalCleanup(): void {

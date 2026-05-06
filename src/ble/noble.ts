@@ -11,6 +11,7 @@ const requireOptional = createRequire(import.meta.url);
 
 let nobleModule: Noble | null = null;
 let activePeripheral: NoblePeripheral | null = null;
+const discoveredPeripherals = new Map<string, NoblePeripheral>();
 
 export const nobleBackend: BluetoothBackend = {
   name: 'noble',
@@ -51,8 +52,10 @@ async function discoverNobleDevices(options: ResolvedDiscoverOptions): Promise<S
       }
 
       const device = toDiscoveredDevice(peripheral);
+      cachePeripheral(peripheral);
       options.logger(`Discovered ${device.name || '<unnamed>'} (${device.address || device.id}, rssi=${device.rssi ?? 'unknown'}).`);
       devices.push(device);
+      if (options.deviceName) finish().catch(reject);
     };
 
     noble.on('discover', onDiscover);
@@ -65,7 +68,7 @@ async function discoverNobleDevices(options: ResolvedDiscoverOptions): Promise<S
 async function connectNobleDevice({ device, timeoutMs, connectTimeoutMs, logger }: ResolvedConnectOptions): Promise<SokSession> {
   const noble = loadNoble();
   await waitForPoweredOn(noble);
-  const peripheral = await scanAndConnect({ noble, device, scanTimeoutMs: timeoutMs, connectTimeoutMs, logger });
+  const peripheral = await connectCachedOrScan({ noble, device, scanTimeoutMs: timeoutMs, connectTimeoutMs, logger });
   activePeripheral = peripheral;
 
   logger('Discovering SOK services and characteristics.');
@@ -93,6 +96,33 @@ async function connectNobleDevice({ device, timeoutMs, connectTimeoutMs, logger 
       if (activePeripheral === peripheral) activePeripheral = null;
     }
   };
+}
+
+async function connectCachedOrScan({
+  noble,
+  device,
+  scanTimeoutMs,
+  connectTimeoutMs,
+  logger
+}: {
+  noble: Noble;
+  device: SokDiscoveredDevice;
+  scanTimeoutMs: number;
+  connectTimeoutMs: number;
+  logger: (message: string) => void;
+}): Promise<NoblePeripheral> {
+  const cached = findCachedPeripheral(device);
+  if (cached) {
+    logger(`Using recently discovered ${displayPeripheral(cached)}.`);
+    try {
+      await connectAsync(cached, connectTimeoutMs, logger);
+      return cached;
+    } catch (error) {
+      logger(`Could not connect to cached peripheral: ${error instanceof Error ? error.message : String(error)}. Scanning again.`);
+    }
+  }
+
+  return scanAndConnect({ noble, device, scanTimeoutMs, connectTimeoutMs, logger });
 }
 
 function scanAndConnect({
@@ -130,6 +160,7 @@ function scanAndConnect({
     const onDiscover = (peripheral: NoblePeripheral) => {
       if (connecting || !matchesKnownDevice(peripheral, device)) return;
       connecting = true;
+      cachePeripheral(peripheral);
       logger(`Found ${displayPeripheral(peripheral)}.`);
       connectAsync(peripheral, connectTimeoutMs, logger)
         .then(() => finish(null, peripheral))
@@ -141,6 +172,20 @@ function scanAndConnect({
       if (error) finish(error).catch(reject);
     });
   });
+}
+
+function cachePeripheral(peripheral: NoblePeripheral): void {
+  const keys = [peripheral.id, peripheral.address, peripheral.advertisement?.localName].filter((key): key is string => !!key);
+  for (const key of keys) discoveredPeripherals.set(key.toLowerCase(), peripheral);
+}
+
+function findCachedPeripheral(device: SokDiscoveredDevice): NoblePeripheral | null {
+  const keys = [device.id, device.address, device.name].filter((key): key is string => !!key);
+  for (const key of keys) {
+    const peripheral = discoveredPeripherals.get(key.toLowerCase());
+    if (peripheral) return peripheral;
+  }
+  return null;
 }
 
 function matchesKnownDevice(peripheral: NoblePeripheral, device: SokDiscoveredDevice): boolean {
@@ -295,6 +340,7 @@ async function shutdownNoble(): Promise<void> {
   await stopScanningAndWait(noble);
   await disconnectQuietly(activePeripheral);
   activePeripheral = null;
+  discoveredPeripherals.clear();
 }
 
 function toDiscoveredDevice(peripheral: NoblePeripheral): SokDiscoveredDevice {

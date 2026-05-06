@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildReadHoldingRegisters, decodeSnapshot, matchesSokDevice, normalizeReads, parseReadResponse } from '../dist/index.js';
-import { toReadOptions } from '../dist/cli.js';
+import { parseIntervalMs, toReadOptions } from '../dist/cli.js';
 
 test('builds SOK Modbus read requests from the capture', () => {
   assert.equal(buildReadHoldingRegisters(0x0080, 0x007a).toString('hex'), '01030080007ac5c1');
@@ -111,4 +111,12 @@ test('maps CLI globals and optional device name to read options', () => {
   assert.equal(options.namePrefix, 'SK');
   assert.equal(options.reads, 'telemetry');
   assert.equal(options.deviceName, 'SK12V324PH00057');
+});
+
+test('parses CLI interval option in seconds', () => {
+  assert.equal(parseIntervalMs(undefined), null);
+  assert.equal(parseIntervalMs('5'), 5000);
+  assert.equal(parseIntervalMs('0.5'), 500);
+  assert.throws(() => parseIntervalMs('0'), /greater than 0/);
+  assert.throws(() => parseIntervalMs('soon'), /greater than 0/);
 });

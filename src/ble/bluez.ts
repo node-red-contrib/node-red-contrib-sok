@@ -80,6 +80,14 @@ async function discoverBluezDevices(options: ResolvedDiscoverOptions): Promise<S
   try {
     const { objectManager, adapter } = await openBluezAdapter(bus);
     const canonicalServiceUuid = options.matchServiceUuid ? formatCanonicalUuid(options.matchServiceUuid) : null;
+    if (options.deviceName) {
+      const cachedMatches = uniqueDevices(findBluezDevices(await objectManager.GetManagedObjects(), options));
+      if (cachedMatches.length > 0) {
+        options.logger(`BlueZ found ${cachedMatches[0].name || cachedMatches[0].address || cachedMatches[0].id} in managed objects.`);
+        return cachedMatches;
+      }
+    }
+
     await setBluezDiscoveryFilter(adapter, Variant, canonicalServiceUuid, options.logger);
     await adapter.StartDiscovery();
     options.logger(`BlueZ discovery started. Waiting ${options.timeoutMs}ms.`);
@@ -90,6 +98,7 @@ async function discoverBluezDevices(options: ResolvedDiscoverOptions): Promise<S
       while (Date.now() - startedAt < options.timeoutMs) {
         const objects = await objectManager.GetManagedObjects();
         devices.push(...findBluezDevices(objects, options));
+        if (options.deviceName && devices.length > 0) break;
         await delay(DISCOVERY_POLL_MS);
       }
     } finally {

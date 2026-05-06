@@ -19,6 +19,12 @@ const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_RESPONSE_TIMEOUT_MS = 5000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 15000;
 
+export interface SokBatteryReader {
+  device: SokDiscoveredDevice;
+  read(reads?: RegisterReadName[] | string): Promise<SokBatteryReading>;
+  disconnect(): Promise<void>;
+}
+
 export async function discoverBatteries(options: DiscoverOptions = {}): Promise<SokDiscoveredDevice[]> {
   const logger = options.logger || (() => {});
   const bluetooth = options.bluetooth || 'auto';
@@ -55,6 +61,32 @@ export async function readBatteries(options: ReadOptions = {}): Promise<SokBatte
 }
 
 export async function readBatteryDevice(device: SokDiscoveredDevice, options: ReadOptions = {}): Promise<SokBatteryReading> {
+  const reader = await connectBatteryDevice(device, options);
+  try {
+    return await reader.read();
+  } finally {
+    await reader.disconnect().catch(() => {});
+  }
+}
+
+export async function connectBatteryReaders(options: ReadOptions = {}): Promise<SokBatteryReader[]> {
+  const logger = options.logger || (() => {});
+  const devices = await discoverBatteries({ ...options, logger });
+  const readers: SokBatteryReader[] = [];
+
+  try {
+    for (const device of devices) {
+      logger(`Connecting ${displayDevice(device)}.`);
+      readers.push(await connectBatteryDevice(device, { ...options, logger }));
+    }
+    return readers;
+  } catch (error) {
+    await Promise.all(readers.map((reader) => reader.disconnect().catch(() => {})));
+    throw error;
+  }
+}
+
+export async function connectBatteryDevice(device: SokDiscoveredDevice, options: ReadOptions = {}): Promise<SokBatteryReader> {
   const logger = options.logger || (() => {});
   const backend = backendForDevice(device);
   const session = await backend.connect({
@@ -64,24 +96,35 @@ export async function readBatteryDevice(device: SokDiscoveredDevice, options: Re
     logger
   });
 
-  try {
-    const blocks: RegisterBlocks = {};
-    for (const read of normalizeReads(options.reads)) {
-      logger(`Reading SOK ${read.name} registers from 0x${read.start.toString(16)} (${read.count}).`);
-      blocks[read.name] = await readRegisters(session, read, {
-        responseTimeoutMs: options.responseTimeoutMs || DEFAULT_RESPONSE_TIMEOUT_MS,
-        logger
-      });
-    }
+  let disconnected = false;
 
-    return {
-      device: session.device,
-      timestamp: new Date().toISOString(),
-      decoded: decodeSnapshot(blocks)
-    };
-  } finally {
-    await session.disconnect().catch(() => {});
+  return {
+    device: session.device,
+    read: (reads) => readBatterySession(session, { ...options, reads: reads ?? options.reads, logger }),
+    disconnect: async () => {
+      if (disconnected) return;
+      disconnected = true;
+      await session.disconnect();
+    }
+  };
+}
+
+export async function readBatterySession(session: SokSession, options: ReadOptions = {}): Promise<SokBatteryReading> {
+  const logger = options.logger || (() => {});
+  const blocks: RegisterBlocks = {};
+  for (const read of normalizeReads(options.reads)) {
+    logger(`Reading SOK ${read.name} registers from 0x${read.start.toString(16)} (${read.count}).`);
+    blocks[read.name] = await readRegisters(session, read, {
+      responseTimeoutMs: options.responseTimeoutMs || DEFAULT_RESPONSE_TIMEOUT_MS,
+      logger
+    });
   }
+
+  return {
+    device: session.device,
+    timestamp: new Date().toISOString(),
+    decoded: decodeSnapshot(blocks)
+  };
 }
 
 export function readRegisters(
