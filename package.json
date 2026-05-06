@@ -49,7 +49,7 @@
     "typescript-eslint": "^8.59.1"
   },
   "engines": {
-    "node": ">=20 <23"
+    "node": ">=20"
   },
   "keywords": [
     "node-red",
