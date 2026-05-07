@@ -5,6 +5,14 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/node-red-contrib/node-red-contrib-sok.git"
+  },
+  "bugs": {
+    "url": "https://github.com/node-red-contrib/node-red-contrib-sok/issues"
+  },
+  "homepage": "https://github.com/node-red-contrib/node-red-contrib-sok#readme",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -22,6 +30,7 @@
     "sok-battery": "bin/sok-battery.js"
   },
   "node-red": {
+    "version": ">=4.0.0",
     "nodes": {
       "sok-battery-device": "nodes/sok-battery-device.js",
       "sok-battery-get": "nodes/sok-battery-get.js"
@@ -37,9 +46,11 @@
     "test": "npm run build --silent && node --test"
   },
   "dependencies": {
-    "@abandonware/noble": "^1.9.2-26",
     "commander": "^14.0.3",
     "dbus-next": "^0.10.2"
+  },
+  "optionalDependencies": {
+    "@abandonware/noble": "1.9.2-26"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -49,7 +60,7 @@
     "typescript-eslint": "^8.59.1"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.0.0"
   },
   "keywords": [
     "node-red",
