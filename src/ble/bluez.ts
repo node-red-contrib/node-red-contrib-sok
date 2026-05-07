@@ -79,7 +79,7 @@ async function discoverBluezDevices(options: ResolvedDiscoverOptions): Promise<S
 
   try {
     const { objectManager, adapter } = await openBluezAdapter(bus);
-    const canonicalServiceUuid = options.matchServiceUuid ? formatCanonicalUuid(options.matchServiceUuid) : null;
+    const canonicalScanServiceUuid = options.scanServiceUuid ? formatCanonicalUuid(options.scanServiceUuid) : null;
     if (options.deviceName) {
       const cachedMatches = uniqueDevices(findBluezDevices(await objectManager.GetManagedObjects(), options));
       if (cachedMatches.length > 0) {
@@ -88,7 +88,7 @@ async function discoverBluezDevices(options: ResolvedDiscoverOptions): Promise<S
       }
     }
 
-    await setBluezDiscoveryFilter(adapter, Variant, canonicalServiceUuid, options.logger);
+    await setBluezDiscoveryFilter(adapter, Variant, canonicalScanServiceUuid, options.logger);
     await adapter.StartDiscovery();
     options.logger(`BlueZ discovery started. Waiting ${options.timeoutMs}ms.`);
 
@@ -303,18 +303,19 @@ function readBluezUuids(device: Record<string, unknown>): string[] {
   return Array.isArray(value) ? value.map((uuid) => String(uuid)) : [];
 }
 
-async function setBluezDiscoveryFilter(adapter: BluezAdapter, Variant: BluezVariantConstructor, serviceUuid: string | null, logger: Logger): Promise<void> {
-  const filters: Array<{ name: string; filter: Record<string, unknown> }> = [
-    { name: 'transport', filter: { Transport: new Variant('s', 'le') } },
-    { name: 'duplicates', filter: { DuplicateData: new Variant('b', false) } }
-  ];
-  if (serviceUuid) filters.push({ name: 'service UUID', filter: { UUIDs: new Variant('as', [serviceUuid]) } });
+export async function setBluezDiscoveryFilter(adapter: BluezAdapter, Variant: BluezVariantConstructor, serviceUuid: string | null, logger: Logger): Promise<void> {
+  const filter: Record<string, unknown> = {
+    Transport: new Variant('s', 'le'),
+    DuplicateData: new Variant('b', false)
+  };
+  if (serviceUuid) filter.UUIDs = new Variant('as', [serviceUuid]);
 
-  for (const { name, filter } of filters) {
-    await adapter.SetDiscoveryFilter(filter)
-      .then(() => logger(`BlueZ discovery filter applied: ${name}.`))
-      .catch((error: unknown) => logger(`Warning: could not set BlueZ discovery filter (${name}): ${errorMessage(error)}.`));
-  }
+  const names = ['transport', 'duplicates'];
+  if (serviceUuid) names.push('service UUID');
+
+  await adapter.SetDiscoveryFilter(filter)
+    .then(() => logger(`BlueZ discovery filter applied: ${names.join(', ')}.`))
+    .catch((error: unknown) => logger(`Warning: could not set BlueZ discovery filter (${names.join(', ')}): ${errorMessage(error)}.`));
 }
 
 async function getBluezBoolean(properties: BluezProperties, interfaceName: string, propertyName: string): Promise<boolean | null> {

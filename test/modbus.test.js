@@ -2,7 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildReadHoldingRegisters, decodeSnapshot, matchesSokDevice, normalizeReads, parseReadResponse } from '../dist/index.js';
+import { setBluezDiscoveryFilter } from '../dist/ble/bluez.js';
 import { parseIntervalMs, toReadOptions } from '../dist/cli.js';
+
+class TestVariant {
+  constructor(signature, value) {
+    this.signature = signature;
+    this.value = value;
+  }
+}
 
 test('builds SOK Modbus read requests from the capture', () => {
   assert.equal(buildReadHoldingRegisters(0x0080, 0x007a).toString('hex'), '01030080007ac5c1');
@@ -95,6 +103,28 @@ test('matches devices by exact name before prefix or service fallback', () => {
   assert.equal(matchesSokDevice({ name: 'SK12V324PH00057' }, { namePrefix: 'SK', deviceName: 'SK12V324PH00058' }), false);
   assert.equal(matchesSokDevice({ name: 'SK12V324PH00057' }, { namePrefix: 'SK' }), true);
   assert.equal(matchesSokDevice({ name: 'Other', serviceUuids: ['0000fff0-0000-1000-8000-00805f9b34fb'] }, { namePrefix: 'SK', serviceUuid: 'fff0' }), true);
+});
+
+test('sets BlueZ discovery filter in one call and only includes explicit scan UUIDs', async () => {
+  const calls = [];
+  const adapter = {
+    async SetDiscoveryFilter(filter) {
+      calls.push(filter);
+    }
+  };
+
+  await setBluezDiscoveryFilter(adapter, TestVariant, null, () => {});
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].Transport, new TestVariant('s', 'le'));
+  assert.deepEqual(calls[0].DuplicateData, new TestVariant('b', false));
+  assert.equal(Object.hasOwn(calls[0], 'UUIDs'), false);
+
+  calls.length = 0;
+  await setBluezDiscoveryFilter(adapter, TestVariant, '0000fff0-0000-1000-8000-00805f9b34fb', () => {});
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].UUIDs, new TestVariant('as', ['0000fff0-0000-1000-8000-00805f9b34fb']));
 });
 
 test('normalizes read groups and rejects unknown groups', () => {
