@@ -46,7 +46,7 @@
     "test": "npm run build --silent && node --test"
   },
   "dependencies": {
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "dbus-next": "^0.10.2"
   },
   "optionalDependencies": {
